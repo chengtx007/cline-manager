@@ -259,7 +259,7 @@ function renderOverview() {
                     <td class="model-id truncate" title="${esc(row.model)}">${esc(row.model)}</td>
                     <td>${esc(row.accountName || '—')}</td>
                     <td class="num">${fmtNum(row.totalTokens)}</td>
-                    <td>${row.error ? `<span class="badge danger" title="${esc(row.error)}">失败</span>` : '<span class="badge ok">成功</span>'}</td>
+                    <td>${row.error ? `<span class="badge danger" title="${esc(row.error)}">失败</span>` : (row.adherence === 'not-adopted' || row.adherence === 'violated') ? `<span class="badge danger" title="期望 ${esc(row.expected || '?')}，实际由 ${esc(row.provider || '未知')} 服务">钉住未生效</span>` : '<span class="badge ok">成功</span>'}</td>
                   </tr>`).join('')}
               </tbody>
             </table>

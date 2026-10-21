@@ -123,6 +123,8 @@ export function createStats({ dataDir, log } = {}) {
       ts,
       model: String(entry.model ?? ''),
       provider: String(entry.provider ?? ''),
+      expected: String(entry.expected ?? ''),
+      adherence: String(entry.adherence ?? ''),
       accountId: String(entry.accountId ?? ''),
       accountName: String(entry.accountName ?? ''),
       keyId: String(entry.keyId ?? ''),
