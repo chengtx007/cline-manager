@@ -4,6 +4,7 @@ import {
   classifyFailure,
   injectPrefs,
   parseRouting,
+  pinAdherence,
   pinWarnings,
   unwrapEnvelope,
 } from './protocol.js'
@@ -397,8 +398,15 @@ export function createChatProxy({ store, pool, models, stats, log }) {
     res.on('error', () => {})
     req.on('error', () => {})
 
-    const recordSuccess = (account, outcome, attemptsUsed) => {
+    const recordSuccess = (account, outcome, attemptsUsed, attempt) => {
       models.noteRouting(canonical, outcome.routing ?? {})
+      const expected = attempt?.upstream ?? null
+      const actual = outcome.routing?.finalProvider ?? ''
+      const adherence = expected === null ? '' : pinAdherence(attempt, outcome.routing ?? {})
+      if (expected !== null) models.notePin(canonical, { expected, actual, adherence, source: 'live' })
+      if (expected !== null && (adherence === 'not-adopted' || adherence === 'violated')) {
+        log?.warn?.(`pin not adopted for ${canonical}: expected ${expected}, served by ${actual || '(unknown)'}`)
+      }
       if (attemptsUsed > 1) {
         for (const row of trace) {
           if (row.status !== 0) models.noteUpstream(canonical, row.upstream, row.code === 'QUOTA' || row.code === 'AUTH' ? 'limited' : 'unknown', row.message, row.ms)
@@ -407,7 +415,9 @@ export function createChatProxy({ store, pool, models, stats, log }) {
       stats.record({
         ts: Date.now(),
         model: canonical,
-        provider: outcome.routing?.finalProvider ?? '',
+        provider: actual,
+        expected,
+        adherence,
         accountId: account.id,
         accountName: account.name,
         keyId: key.id,
@@ -456,7 +466,7 @@ export function createChatProxy({ store, pool, models, stats, log }) {
           }
 
           if (outcome.ok === true) {
-            recordSuccess(account, outcome, attemptIndex)
+            recordSuccess(account, outcome, attemptIndex, attempt)
             return
           }
 

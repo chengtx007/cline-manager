@@ -127,6 +127,29 @@ try {
   assert.equal(stats.recent[0].provider, 'beta')
   ok('双拼写钉住服务商并回读实际路由')
 
+  // 5b. planner pipeline + pin test endpoint
+  const kimiId = 'cline-pass/kimi-k3'
+  await admin('PATCH', `/models/${enc(kimiId)}`, {
+    pin: { upstreams: ['gamma'], exclude: [], pinMode: 'strict', sort: '', spelling: 'both' },
+  })
+  mock.reset()
+  response = await chat({ model: kimiId, messages: [{ role: 'user', content: 'planner pin' }] })
+  assert.equal(response.status, 200)
+  payload = await response.json()
+  const plannerRequests = mock.state.requests.filter((request) => request.path.endsWith('/chat/completions'))
+  assert.equal(plannerRequests.length, 1)
+  assert.deepEqual(plannerRequests[0].body.providerOptions.gateway.only, ['gamma'])
+  assert.deepEqual(plannerRequests[0].body.provider.only, ['gamma'])
+  assert.equal(payload.choices[0].message.provider_metadata.gateway.routing.finalProvider, 'gamma')
+
+  const pinTest = await admin('POST', `/models/${enc(modelId)}/test`)
+  assert.equal(pinTest.ok, true)
+  assert.equal(pinTest.expected, 'beta')
+  assert.equal(pinTest.actual, 'beta')
+  assert.equal(pinTest.adherence, 'adopted')
+  assert.equal(pinTest.account, 'main')
+  ok('direct/planner 双链路钉住与「测试钉住」回读实际服务商')
+
   // 6. probe + validate
   const probe = await admin('POST', `/models/${enc(modelId)}/probe`)
   assert.equal(probe.result.ok, true)

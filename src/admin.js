@@ -353,6 +353,12 @@ export function createAdmin({ store, pool, usage, models, stats, log, adminToken
         sendJSON(res, 200, { ...result, model: models.list().find((entry) => entry.id === id) })
         return
       }
+      if (id !== undefined && action === 'test' && method === 'POST') {
+        modelExists(id)
+        const result = await models.testPin(id)
+        sendJSON(res, 200, { ...result, model: models.list().find((entry) => entry.id === id) })
+        return
+      }
     }
 
     // ── stats ────────────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ const S = {
   modelFilter: '',
   expanded: new Set(),
   validateResults: {},
+  testResults: {},
   busy: new Set(),
   loadingStats: false,
 }
@@ -489,20 +490,22 @@ function modelsTable() {
   if (models.length === 0) return '<div class="empty">没有匹配的模型。可以刷新上游目录或手动添加。</div>'
   const rows = models.map((model) => {
     const discovered = model.discovered ?? {}
+    const lastPin = model.lastPin
+    const pinBroken = lastPin && lastPin.expected && (lastPin.adherence === 'not-adopted' || lastPin.adherence === 'violated')
     const expanded = S.expanded.has(model.id)
     return `
       <tr class="model-row ${expanded ? 'expanded' : ''}">
         <td style="width:60px"><label class="switch"><input type="checkbox" data-action="toggle-model" data-id="${esc(model.id)}" ${model.enabled ? 'checked' : ''}><span></span></label></td>
         <td><div class="model-id truncate" title="${esc(model.id)}">${esc(model.id)}</div><div class="small muted">${model.enabled ? '已开放' : '已关闭'}</div></td>
         <td>${esc(pinSummary(model.pin))}</td>
-        <td>${discovered.lastProvider ? `<span class="badge accent">${esc(discovered.lastProvider)}</span>` : '<span class="badge">未探测</span>'}</td>
+        <td>${discovered.lastProvider ? `<span class="badge accent">${esc(discovered.lastProvider)}</span>` : '<span class="badge">未探测</span>'}${pinBroken ? `<span class="badge danger" title="最近一次带钉住的请求没有落在 ${esc(lastPin.expected)}">钉住未生效</span>` : ''}</td>
         <td>${discovered.pipeline ? `<span class="badge">${esc(discovered.pipeline)}</span>` : '<span class="muted small">—</span>'}</td>
         <td style="text-align:right"><button class="btn small ghost" data-action="expand-model" data-id="${esc(model.id)}">${expanded ? '收起' : '钉住设置'}</button></td>
       </tr>
       ${expanded ? `<tr><td colspan="6" style="padding:0">${pinPanel(model)}</td></tr>` : ''}`
   }).join('')
   return `<div class="table-wrap"><table class="table" style="table-layout:fixed">
-    <thead><tr><th style="width:60px">开启</th><th style="width:34%">模型</th><th style="width:22%">钉住</th><th style="width:14%">当前服务商</th><th style="width:10%">链路</th><th></th></tr></thead>
+    <thead><tr><th style="width:60px">开启</th><th style="width:34%">模型</th><th style="width:22%">钉住</th><th style="width:14%" title="探测请求不带钉住，这里只是最近一次探测或请求看到的服务商；确认钉住请展开后点「测试钉住」">最近服务商</th><th style="width:10%">链路</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`
 }
@@ -514,6 +517,14 @@ function pinPanel(model) {
   const selected = pin.upstreams ?? []
   const excluded = pin.exclude ?? []
   const validation = S.validateResults[model.id]
+  const test = S.testResults[model.id]
+  const lastPin = model.lastPin
+  const pinBad = lastPin && lastPin.expected && (lastPin.adherence === 'not-adopted' || lastPin.adherence === 'violated')
+  const pinOk = lastPin && lastPin.expected && (lastPin.adherence === 'adopted' || lastPin.adherence === 'fallback')
+  const pinSource = lastPin?.source === 'live' ? '最近请求' : lastPin?.source === 'test' ? '测试' : lastPin?.source === 'validate' ? '校验' : '检查'
+  const testHtml = test
+    ? `<div class="${test.ok ? 'pin-hint' : 'pin-warning'}">测试钉住${test.ok ? '生效' : '未生效'}：期望 ${esc(test.expected || '自动')}，实际由 ${esc(test.actual || '未知')} 服务${test.account ? ` · 账户 ${esc(test.account)}` : ''}${test.ok ? '' : ` · ${esc(test.note || '')}`}</div>`
+    : ''
   const warnings = []
   if (excluded.length > 0 && channels.length === 0) warnings.push('还没有服务商列表，排除项无法编译成允许列表，请先探测。')
 
@@ -580,10 +591,15 @@ function pinPanel(model) {
     <div class="toolbar" style="margin-top:16px">
       <button class="btn small primary" data-action="probe-model" data-id="${esc(model.id)}">探测</button>
       <button class="btn small" data-action="validate-model" data-id="${esc(model.id)}">校验</button>
+      <button class="btn small" data-action="test-pin" data-id="${esc(model.id)}">测试钉住</button>
+      ${pinBad ? `<span class="badge danger" title="${esc(pinSource)} · ${esc(fmtAgo(lastPin.at))}">钉住未生效 · 实际 ${esc(lastPin.actual || '未知')}</span>` : ''}
+      ${pinOk ? `<span class="badge ok" title="${esc(pinSource)} · ${esc(fmtAgo(lastPin.at))}">钉住已生效 · ${esc(lastPin.actual || lastPin.expected)}</span>` : ''}
       <span class="badge">链路：${esc(discovered.pipeline || '未知')}</span>
       ${discovered.canonicalSlug ? `<span class="badge">slug：${esc(discovered.canonicalSlug)}</span>` : ''}
       ${discovered.probedAt ? `<span class="badge">探测于 ${esc(fmtAgo(discovered.probedAt))}</span>` : ''}
     </div>
+    <div class="pin-hint">「探测」发的是不带钉住的请求，只用来发现渠道，服务商列可以是任意一个；要确认钉住是否真的生效，请点「测试钉住」。</div>
+    ${testHtml}
     ${warnings.map((warning) => `<div class="pin-warning">${esc(warning)}</div>`).join('')}
     ${validationHtml}
   </div>`
@@ -1054,6 +1070,18 @@ view.addEventListener('click', async (event) => {
       await loadState()
       const ok = response.results.filter((row) => row.status === 'ok').length
       toast(`校验完成：${ok}/${response.results.length} 个服务商钉住生效`, ok > 0 ? 'ok' : 'err')
+      return
+    }
+    if (action === 'test-pin') {
+      target.disabled = true
+      target.textContent = '测试中…'
+      const response = await api(`/models/${encodeURIComponent(id)}/test`, { method: 'POST', body: {} })
+      S.testResults[id] = response
+      await loadState({ quiet: true })
+      toast(response.ok
+        ? `钉住生效：由 ${response.actual || response.expected} 服务`
+        : (response.note || `钉住未生效：实际由 ${response.actual || '未知'} 服务`),
+      response.ok ? 'ok' : 'err')
       return
     }
     if (action === 'stats-days') {

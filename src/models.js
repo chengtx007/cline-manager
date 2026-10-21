@@ -1,5 +1,6 @@
 import { chatCompletion, fetchAllModels } from './cline.js'
 import {
+  buildAttempts,
   classifyUpstreamError,
   extractAvailableProviders,
   injectPrefs,
@@ -65,6 +66,13 @@ function normalizePin(input, previous = defaultPin()) {
 export function createModelRegistry({ store, pool, log }) {
   const config = () => store.config
   const baseURLOf = (account) => String(account?.baseURL || config().upstream.baseURL || '')
+  /**
+   * The last observed result of a pin, kept in memory rather than in the
+   * config: a probe, a validation or one live request is evidence about a
+   * moment, not a setting. It is what the panel shows next to the pin so
+   * "served by someone else" is visible instead of silent.
+   */
+  const pinStatus = new Map()
 
   function resolve(requested) {
     const raw = String(requested ?? '').trim()
@@ -95,6 +103,7 @@ export function createModelRegistry({ store, pool, log }) {
       enabled: config().models.enabled.includes(id),
       pin: pinFor(id),
       discovered: metaFor(id),
+      lastPin: pinStatus.get(id) ?? null,
     }
   }
 
@@ -124,6 +133,7 @@ export function createModelRegistry({ store, pool, log }) {
       next.models.enabled = next.models.enabled.filter((value) => value !== id)
       delete next.models.pins?.[id]
       delete next.models.discovered?.[id]
+      pinStatus.delete(id)
     })
   }
 
@@ -143,6 +153,8 @@ export function createModelRegistry({ store, pool, log }) {
     store.update((next) => {
       next.models.pins[id] = normalizePin(patch, normalizePin(next.models.pins?.[id] ?? {}, defaultPin()))
     })
+    // A new pin invalidates whatever the previous one was verified against.
+    pinStatus.delete(id)
     return publicModel(id)
   }
 
@@ -261,9 +273,94 @@ export function createModelRegistry({ store, pool, log }) {
     return { ok: true, model: id, ms: Date.now() - started, pipeline, pinnable: pipeline !== null, lastProvider: served ?? '', upstreams: combined, channels, canonicalSlug: discovered.canonicalSlug }
   }
 
+  /** Record the outcome of a pin check, for the row badge. */
+  function notePin(id, status) {
+    if (status === null || status === undefined) {
+      pinStatus.delete(id)
+      return null
+    }
+    const value = { ...status, at: status.at ?? Date.now() }
+    pinStatus.set(id, value)
+    return value
+  }
+
+  /**
+   * Send one request through the saved pin and report whether the router
+   * honored it. A probe is intentionally unpinned, so the provider a probe
+   * reports says nothing about the saved pin; this is the action that does.
+   */
+  async function testPin(id) {
+    const pin = pinFor(id)
+    const expected = pin.upstreams?.[0] ?? null
+    if (expected === null && (pin.exclude ?? []).length === 0) {
+      return { ok: false, model: id, expected: null, actual: '', adherence: 'unresolved', note: '这个模型还没有钉住任何服务商', trace: [] }
+    }
+    const meta = metaFor(id)
+    const account = pool.peek()
+    if (account === null) throw new Error('没有可用的 Cline 账户（请先添加并启用账户）')
+    const baseURL = baseURLOf(account)
+    const timeoutMs = Math.max(10_000, Number(config().upstream.connectTimeoutMs ?? 60_000))
+    const attempts = buildAttempts(pin)
+    const trace = []
+    const started = Date.now()
+    let last = null
+
+    for (const attempt of attempts) {
+      const body = injectPrefs({
+        model: id,
+        messages: [{ role: 'user', content: 'Reply with the word OK' }],
+        max_tokens: 512,
+      }, meta, attempt)
+      try {
+        const result = await chatCompletion({ baseURL, apiKey: account.apiKey, body, timeoutMs })
+        const ms = Date.now() - started
+        if (failed(result)) {
+          const note = messageOf(result)
+          trace.push({ upstream: attempt.upstream ?? '(auto)', status: 0, adherence: 'error', ms, note: note.slice(0, 160) })
+          last = { ok: false, expected: attempt.upstream ?? null, actual: '', adherence: 'error', note }
+          if (attempt.upstream) noteUpstream(id, attempt.upstream, classifyUpstreamError(note), note, ms)
+          continue
+        }
+        const routing = parseRouting(result.json)
+        const adherence = pinAdherence(attempt, routing)
+        const actual = routing.finalProvider ?? ''
+        trace.push({ upstream: attempt.upstream ?? '(auto)', status: 200, adherence, ms, note: actual ? `实际由 ${actual} 服务` : '响应没有报告服务商' })
+        last = { ok: true, expected: attempt.upstream ?? null, actual, adherence, pipeline: routing.pipeline, canonicalSlug: routing.canonicalSlug, note: '' }
+        if (adherence === 'adopted' || adherence === 'fallback') {
+          notePin(id, { expected: last.expected, actual, adherence, source: 'test' })
+          if (attempt.upstream !== null) noteUpstream(id, attempt.upstream, 'ok', 'pin adopted', ms)
+          return { ...last, model: id, account: account.name, ms, trace }
+        }
+      } catch (error) {
+        const ms = Date.now() - started
+        const note = String(error?.message ?? error)
+        trace.push({ upstream: attempt.upstream ?? '(auto)', status: 0, adherence: 'error', ms, note: note.slice(0, 160) })
+        last = { ok: false, expected: attempt.upstream ?? null, actual: '', adherence: 'error', note }
+      }
+    }
+
+    if (last !== null) {
+      notePin(id, { expected: last.expected, actual: last.actual ?? '', adherence: last.adherence === 'unresolved' ? 'unresolved' : 'not-adopted', source: 'test' })
+      if (last.expected !== null) noteUpstream(id, last.expected, 'bad', 'pin not adopted', Date.now() - started)
+      return {
+        ...last,
+        model: id,
+        ok: false,
+        account: account.name,
+        ms: Date.now() - started,
+        trace,
+        note: last.adherence === 'unresolved'
+          ? '响应没有报告实际服务商，无法验证钉住'
+          : `钉住未生效：期望 ${last.expected ?? '(自动)'}，实际由 ${last.actual || '(unknown)'} 服务`,
+      }
+    }
+    return { ok: false, model: id, expected, actual: '', adherence: 'error', note: '测试请求没有结果', trace }
+  }
+
   /** Send a tiny pinned request per channel and record whether the pin held. */
   async function validate(id, requested) {
     const meta = metaFor(id)
+    const pinned = pinFor(id).upstreams?.[0] ?? null
     const upstreams = Array.isArray(requested) && requested.length > 0
       ? requested.map(String)
       : Array.isArray(meta.upstreams) ? meta.upstreams : []
@@ -285,13 +382,14 @@ export function createModelRegistry({ store, pool, log }) {
           const ms = Date.now() - started
           if (failed(result)) {
             const note = messageOf(result)
-            return { upstream, status: classifyUpstreamError(note), ms, note: note.slice(0, 200) }
+            return { upstream, status: classifyUpstreamError(note), ms, note: note.slice(0, 200), actual: '' }
           }
           const routing = parseRouting(result.json)
           const adherence = pinAdherence(attempt, routing)
-          if (adherence === 'adopted') return { upstream, status: 'ok', ms, note: 'pin adopted' }
-          if (adherence === 'unresolved') return { upstream, status: 'unknown', ms, note: '响应没有报告服务商，钉住无法验证' }
-          return { upstream, status: 'not-adopted', ms, note: `钉住未生效，实际由 ${routing.finalProvider ?? '(unknown)'} 服务` }
+          const actual = routing.finalProvider ?? ''
+          if (adherence === 'adopted') return { upstream, status: 'ok', ms, note: 'pin adopted', actual }
+          if (adherence === 'unresolved') return { upstream, status: 'unknown', ms, note: '响应没有报告服务商，钉住无法验证', actual }
+          return { upstream, status: 'not-adopted', ms, note: `钉住未生效，实际由 ${routing.finalProvider ?? '(unknown)'} 服务`, actual }
         } catch (error) {
           return { upstream, status: 'unknown', ms: Date.now() - started, note: String(error?.message ?? error).slice(0, 200) }
         }
@@ -299,6 +397,14 @@ export function createModelRegistry({ store, pool, log }) {
       for (const row of settled) {
         results.push(row)
         if (row.status !== 'unknown') noteUpstream(id, row.upstream, row.status, row.note, row.ms)
+        if (pinned !== null && row.upstream === pinned) {
+          notePin(id, {
+            expected: pinned,
+            actual: row.actual || '',
+            adherence: row.status === 'ok' ? 'adopted' : row.status === 'not-adopted' ? 'not-adopted' : 'unresolved',
+            source: 'validate',
+          })
+        }
       }
     }
     return { model: id, results }
@@ -388,6 +494,8 @@ export function createModelRegistry({ store, pool, log }) {
     refreshCatalog,
     probe,
     validate,
+    testPin,
+    notePin,
     noteRouting,
     noteUpstream,
     noteFromError,
