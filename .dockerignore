@@ -1,0 +1,11 @@
+node_modules
+data
+test
+deploy
+docs
+.github
+.env
+.git
+.gitignore
+.tmp
+*.log

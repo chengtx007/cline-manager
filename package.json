@@ -1,0 +1,38 @@
+{
+  "name": "cline-manager",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cline Manager: a standalone OpenAI-compatible gateway for Cline Pass with multi-account rotation, quota-aware failover, provider pinning, and an admin web UI.",
+  "engines": {
+    "node": ">=20.3.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test/smoke.mjs",
+    "test:ui": "node test/ui.mjs",
+    "test:all": "node test/smoke.mjs && node test/ui.mjs"
+  },
+  "keywords": [
+    "cline",
+    "cline-pass",
+    "openai",
+    "gateway",
+    "openrouter",
+    "vercel-ai-gateway",
+    "docker"
+  ],
+  "homepage": "https://github.com/chengtx007/cline-manager",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chengtx007/cline-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/chengtx007/cline-manager/issues"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

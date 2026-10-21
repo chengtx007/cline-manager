@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cline Manager · 管理后台</title>
+  <link rel="stylesheet" href="/admin/app.css">
+</head>
+<body>
+  <div id="login" class="login-screen">
+    <form class="login-card" id="login-form">
+      <div class="brand-mark">CM</div>
+      <h1>Cline Manager</h1>
+      <p>输入管理员令牌以继续。令牌位于 <code>data/config.json</code> 的 <code>server.adminToken</code>，或启动时通过 <code>ADMIN_TOKEN</code> 环境变量提供。</p>
+      <label class="field">
+        <span>管理员令牌</span>
+        <input type="password" id="login-token" placeholder="atk-..." autocomplete="current-password" required>
+      </label>
+      <button class="btn primary block" type="submit">登录</button>
+      <p class="login-error" id="login-error"></p>
+    </form>
+  </div>
+
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark small">CM</div>
+        <div>
+          <strong>Cline Manager</strong>
+          <span>OpenAI 兼容网关</span>
+        </div>
+      </div>
+      <nav id="nav">
+        <button data-tab="overview" class="nav-item active">概览</button>
+        <button data-tab="accounts" class="nav-item">账户</button>
+        <button data-tab="models" class="nav-item">模型与钉住</button>
+        <button data-tab="keys" class="nav-item">接入密钥</button>
+        <button data-tab="stats" class="nav-item">用量统计</button>
+        <button data-tab="settings" class="nav-item">设置</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="effective-account">
+          <span>当前调度账户</span>
+          <strong id="effective-account">—</strong>
+        </div>
+        <button class="btn ghost small block" id="logout-btn">退出登录</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="page-title">概览</h1>
+          <p id="page-subtitle">服务运行状态与今日用量</p>
+        </div>
+        <div class="topbar-actions">
+          <span class="pill" id="upstream-pill">—</span>
+          <button class="btn ghost" id="refresh-btn">刷新</button>
+        </div>
+      </header>
+      <section id="view" class="view"></section>
+    </main>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toasts" class="toasts"></div>
+
+  <script type="module" src="/admin/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+services:
+  cline-manager:
+    image: ghcr.io/chengtx007/cline-manager:latest
+    build:
+      context: .
+    container_name: cline-manager
+    restart: unless-stopped
+    ports:
+      # Bound to localhost by default. Use "8787:8787" to expose it on the LAN.
+      - "127.0.0.1:8787:8787"
+    environment:
+      DATA_DIR: /data
+      HOST: 0.0.0.0
+      PORT: "8787"
+      # Set these before exposing the service, otherwise the first start
+      # generates new ones and prints them in `docker logs`.
+      # ADMIN_TOKEN: atk-change-me
+      # GATEWAY_API_KEY: sk-cline-change-me
+    volumes:
+      - cline-manager-data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8787/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  cline-manager-data:
