@@ -201,6 +201,8 @@ http://<host>:8787/public
 
 关闭开关后，`/public` 与 `/public/api/state` 都返回 404。该开关默认关闭。
 
+![公开展示页](docs/screenshots/public.png)
+
 ## 钉住是怎么实现的
 
 Cline Pass 背后有两条路由链路，它们认的字段不一样：
