@@ -17,6 +17,14 @@ import {
 export function createAdmin({ store, pool, usage, models, stats, log, adminToken }) {
   const config = () => store.config
 
+  /** Keep only the first few characters, enough to tell accounts apart. */
+  function maskAccountName(name) {
+    const value = String(name ?? '').trim()
+    if (value.length <= 1) return '***'
+    const keep = Math.min(4, Math.max(1, Math.floor(value.length / 2)))
+    return `${value.slice(0, keep)}***`
+  }
+
   function authorized(req) {
     const given = parseBearer(req) || String(req.headers['x-admin-token'] ?? '').trim()
     return given.length > 0 && safeEqual(given, adminToken)
@@ -66,6 +74,7 @@ export function createAdmin({ store, pool, usage, models, stats, log, adminToken
       effectiveAccountId: pool.effectiveId(),
       allowUnknownModels: current.server.allowUnknownModels === true,
       cors: current.server.cors === true,
+      publicDashboard: current.publicDashboard === true,
       quotaGuard: { ...current.quotaGuard },
       cooldown: { ...current.cooldown },
       timeouts: {
@@ -96,6 +105,59 @@ export function createAdmin({ store, pool, usage, models, stats, log, adminToken
         total: stats.allTime(),
         recent: stats.range(7).recent.slice(0, 20),
       },
+    }
+  }
+
+  /**
+   * The unauthenticated snapshot behind /public. It deliberately contains no
+   * account ids, key hints, upstream URLs, request rows or full account names:
+   * everything here is shown to anyone who can open the page.
+   */
+  function publicView() {
+    const today = stats.today()
+    const cooling = pool.snapshot()
+    const now = Date.now()
+    const accounts = config().accounts.map((account) => {
+      const quota = usage.get(account.id)
+      const cool = cooling[account.id]
+      const coolingActive = cool !== undefined && Number(cool.until ?? 0) > now
+      const enabled = account.enabled !== false
+      return {
+        name: maskAccountName(account.name),
+        enabled,
+        status: !enabled ? 'disabled' : coolingActive ? 'cooling' : 'active',
+        cooling: coolingActive ? { code: String(cool.code ?? ''), until: Number(cool.until ?? 0) } : null,
+        quota: quota && quota.ok === true
+          ? {
+              at: Number(quota.at ?? 0),
+              limits: (quota.limits ?? []).map((limit) => ({
+                type: String(limit.type ?? ''),
+                percentUsed: Math.max(0, Math.min(100, Number(limit.percentUsed) || 0)),
+                resetsAt: String(limit.resetsAt ?? ''),
+              })),
+            }
+          : null,
+      }
+    })
+    return {
+      enabled: true,
+      generatedAt: now,
+      today: {
+        requests: today.requests,
+        errors: today.errors,
+        promptTokens: today.promptTokens,
+        completionTokens: today.completionTokens,
+        totalTokens: today.totalTokens,
+        cachedTokens: today.cachedTokens,
+        reasoningTokens: today.reasoningTokens,
+      },
+      summary: {
+        accounts: accounts.length,
+        active: accounts.filter((entry) => entry.status === 'active').length,
+        cooling: accounts.filter((entry) => entry.status === 'cooling').length,
+        disabled: accounts.filter((entry) => entry.status === 'disabled').length,
+      },
+      accounts,
     }
   }
 
@@ -170,6 +232,7 @@ export function createAdmin({ store, pool, usage, models, stats, log, adminToken
         if (body.activeAccountId !== undefined) next.activeAccountId = String(body.activeAccountId)
         if (body.allowUnknownModels !== undefined) next.server.allowUnknownModels = boolOr(body.allowUnknownModels, next.server.allowUnknownModels)
         if (body.cors !== undefined) next.server.cors = boolOr(body.cors, next.server.cors)
+        if (body.publicDashboard !== undefined) next.publicDashboard = boolOr(body.publicDashboard, next.publicDashboard === true)
         if (body.baseURL !== undefined && String(body.baseURL).trim()) next.upstream.baseURL = String(body.baseURL).trim().replace(/\/+$/, '')
         if (body.quotaGuard && typeof body.quotaGuard === 'object') {
           next.quotaGuard.enabled = boolOr(body.quotaGuard.enabled, next.quotaGuard.enabled)
@@ -377,5 +440,5 @@ export function createAdmin({ store, pool, usage, models, stats, log, adminToken
     sendJSON(res, 404, { error: 'not_found' })
   }
 
-  return { handle, stateView, accountView, keyView, adminToken }
+  return { handle, stateView, publicView, accountView, keyView, adminToken }
 }

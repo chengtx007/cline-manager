@@ -105,6 +105,33 @@ export async function createGateway({ dataDir, env = process.env, port, host } =
       serveStatic(res, pathname.slice('/admin/'.length))
       return
     }
+
+    // Public status page: opt-in, read-only, and deliberately unauthenticated.
+    if (pathname === '/public' || pathname === '/public/') {
+      if (store.config.publicDashboard !== true) {
+        sendJSON(res, 404, { error: 'not_found' })
+        return
+      }
+      serveStatic(res, 'share.html')
+      return
+    }
+    if (pathname === '/public/share.js' || pathname === '/public/share.css') {
+      if (store.config.publicDashboard !== true) {
+        sendJSON(res, 404, { error: 'not_found' })
+        return
+      }
+      serveStatic(res, pathname.slice('/public/'.length))
+      return
+    }
+    if (pathname === '/public/api/state') {
+      if (store.config.publicDashboard !== true) {
+        sendJSON(res, 404, { error: 'not_found' })
+        return
+      }
+      sendJSON(res, 200, admin.publicView())
+      return
+    }
+
     if (pathname === '/favicon.ico') {
       res.writeHead(204)
       res.end()

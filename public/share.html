@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Cline Manager · 公开状态</title>
+  <link rel="stylesheet" href="/public/share.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div class="brand">
+        <div class="mark">CM</div>
+        <div>
+          <h1>Cline Manager</h1>
+          <p>公开状态面板</p>
+        </div>
+      </div>
+      <div class="live">
+        <span class="dot" id="live-dot"></span>
+        <span id="updated">正在读取…</span>
+      </div>
+    </header>
+
+    <div id="error" class="error" hidden></div>
+
+    <section class="today" aria-labelledby="today-title">
+      <div class="section-head">
+        <h2 id="today-title">今日总用量</h2>
+        <span id="today-date" class="muted"></span>
+      </div>
+      <div class="cards" id="today-cards"></div>
+    </section>
+
+    <section class="accounts" aria-labelledby="accounts-title">
+      <div class="section-head">
+        <h2 id="accounts-title">账号状态</h2>
+        <span id="account-summary" class="muted"></span>
+      </div>
+      <div class="account-grid" id="accounts">
+        <div class="empty">正在读取…</div>
+      </div>
+    </section>
+
+    <footer class="foot">
+      账户名称只保留开头几个字符作为区分；这里不展示 API Key、完整账户名、请求内容或管理员信息。数据每 30 秒自动刷新。
+    </footer>
+  </div>
+
+  <script type="module" src="/public/share.js"></script>
+</body>
+</html>

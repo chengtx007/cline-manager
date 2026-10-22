@@ -46,6 +46,8 @@ export function defaultConfig() {
     accounts: [],
     accountMode: 'roundrobin',
     activeAccountId: '',
+    /** Opt-in, unauthenticated status page at /public. */
+    publicDashboard: false,
     cooldown: {
       quotaMs: 15 * 60_000,
       authMs: 30 * 60_000,
@@ -86,6 +88,7 @@ function coerceConfig(raw) {
   // A model can only be enabled while it is known.
   config.models.enabled = config.models.enabled.filter((id) => config.models.known.includes(id))
   config.accountMode = config.accountMode === 'roundrobin' ? 'roundrobin' : 'single'
+  config.publicDashboard = config.publicDashboard === true
   return config
 }
 

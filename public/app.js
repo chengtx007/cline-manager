@@ -194,7 +194,6 @@ function renderView() {
     case 'accounts': renderAccounts(); break
     case 'models': renderModels(); break
     case 'keys': renderKeys(); break
-    case 'stats': renderStats(); break
     case 'settings': renderSettings(); break
     default: renderOverview()
   }
@@ -266,7 +265,12 @@ function renderOverview() {
           </div>
         </div>
       </div>
+    </div>
+
+    <div id="overview-stats">
+      <div class="empty">正在读取用量统计…</div>
     </div>`
+  loadOverviewStats()
 }
 
 /* ── accounts ──────────────────────────────────────────────────────────── */
@@ -732,20 +736,10 @@ async function loadStats() {
   }
 }
 
-function renderStats() {
-  const stats = S.stats
-  if (S.statsError) {
-    view.innerHTML = `<div class="panel"><div class="panel-body"><div class="empty">统计读取失败：${esc(S.statsError)}</div><button class="btn primary" data-action="reload-stats" style="margin:12px auto 0;display:block">重试</button></div></div>`
-    return
-  }
-  if (!stats) {
-    view.innerHTML = '<div class="panel"><div class="panel-body"><div class="empty">正在读取统计…</div></div></div>'
-    loadStats().then(() => { if (S.tab === 'stats') renderStats() })
-    return
-  }
+function statsSectionHtml(stats) {
   const totals = stats.totals
-  view.innerHTML = `
-    <div class="toolbar" style="margin-bottom:16px">
+  return `
+    <div class="toolbar" style="margin:22px 0 16px">
       <div class="tabs">
         ${[1, 7, 30, 90].map((days) => `<button class="${S.statsDays === days ? 'active' : ''}" data-action="stats-days" data-days="${days}">${days === 1 ? '今天' : `${days} 天`}</button>`).join('')}
       </div>
@@ -813,6 +807,21 @@ function renderStats() {
     </div>`
 }
 
+async function loadOverviewStats() {
+  const mount = $('#overview-stats')
+  if (!mount) return
+  if (S.stats && !S.statsError) mount.innerHTML = statsSectionHtml(S.stats)
+  else mount.innerHTML = '<div class="empty">正在读取用量统计…</div>'
+  await loadStats()
+  const current = $('#overview-stats')
+  if (!current) return
+  if (S.statsError) {
+    current.innerHTML = `<div class="panel"><div class="panel-body"><div class="empty">统计读取失败：${esc(S.statsError)}</div><button class="btn primary" data-action="reload-stats" style="margin:12px auto 0;display:block">重试</button></div></div>`
+    return
+  }
+  current.innerHTML = S.stats ? statsSectionHtml(S.stats) : '<div class="empty">暂无统计数据</div>'
+}
+
 /* ── settings ──────────────────────────────────────────────────────────── */
 
 function renderSettings() {
@@ -845,6 +854,11 @@ function renderSettings() {
               <span class="switch"><input type="checkbox" name="cors" ${settings.cors ? 'checked' : ''}><span></span></span>
               <span>为 /v1 开启 CORS</span>
             </label>
+            <label class="field" style="grid-template-columns:auto 1fr;align-items:center">
+              <span class="switch"><input type="checkbox" name="publicDashboard" ${settings.publicDashboard ? 'checked' : ''}><span></span></span>
+              <span>开启公开展示页（无需管理员令牌）</span>
+            </label>
+            <div class="hint" style="margin:-2px 0 12px">公开地址：<a href="/public" target="_blank" rel="noreferrer">/public</a> · 只展示打码后的账户名、账号状态和今日汇总，不含 Key、完整账户名或请求内容。</div>
           </div>
           <div>
             <label class="field" style="grid-template-columns:auto 1fr;align-items:center">
@@ -886,6 +900,7 @@ function renderSettings() {
           activeAccountId: form.elements.activeAccountId.value,
           allowUnknownModels: form.elements.allowUnknownModels.checked,
           cors: form.elements.cors.checked,
+          publicDashboard: form.elements.publicDashboard.checked,
           quotaGuard: {
             enabled: form.elements.quotaEnabled.checked,
             threshold: number('quotaThreshold'),
@@ -1088,13 +1103,13 @@ view.addEventListener('click', async (event) => {
       S.statsDays = Number(target.dataset.days)
       S.stats = null
       S.statsError = ''
-      renderStats()
+      await loadOverviewStats()
       return
     }
     if (action === 'reload-stats') {
       S.stats = null
       S.statsError = ''
-      renderStats()
+      await loadOverviewStats()
       return
     }
   } catch (error) {
@@ -1160,13 +1175,7 @@ $('#logout-btn').addEventListener('click', logout)
 for (const item of document.querySelectorAll('.nav-item')) {
   item.addEventListener('click', () => {
     S.tab = item.dataset.tab
-    if (S.tab === 'stats') {
-      S.stats = null
-      S.statsError = ''
-      renderStats()
-    } else {
-      renderView()
-    }
+    renderView()
   })
 }
 
