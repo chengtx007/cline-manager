@@ -258,7 +258,7 @@ Cline Pass 背后有两条路由链路，它们认的字段不一样：
 
 - 工作流：[`.github/workflows/docker.yml`](.github/workflows/docker.yml)
 - 触发：推送到 `main`、推送 `v*` 标签、PR、手动 `workflow_dispatch`
-- 流程：先跑 16 项端到端测试和 6 项 UI 测试，再构建 `linux/amd64` + `linux/arm64` 多架构镜像并推送到 GHCR
+- 流程：先跑 16 项端到端测试和 7 项 UI 测试，再构建 `linux/amd64` + `linux/arm64` 多架构镜像并推送到 GHCR
 - PR 只构建 `linux/amd64` 且不推送
 
 发布一个新版本：

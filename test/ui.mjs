@@ -97,7 +97,15 @@ try {
   await sleep(300)
   const secret = document.querySelector('#secret-value')?.textContent ?? ''
   assert(secret.startsWith('sk-cline-'), `secret modal missing (${secret})`)
-  console.log('  ✓ 新建接入密钥并展示一次性密钥')
+  window.document.execCommand = () => true
+  click('#copy-secret')
+  await sleep(80)
+  assert((document.querySelector('#toasts')?.textContent ?? '').includes('已复制到剪贴板'), 'execCommand copy fallback did not run')
+  window.document.execCommand = () => false
+  click('#copy-secret')
+  await sleep(80)
+  assert((document.querySelector('#toasts')?.textContent ?? '').includes('已选中密钥'), 'failed copy did not select the secret')
+  console.log('  ✓ 新建接入密钥、复制回退与失败选中')
 
   click('.nav-item[data-tab="overview"]')
   await sleep(700)

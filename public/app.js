@@ -31,6 +31,47 @@ function esc(value) {
     .replaceAll("'", '&#39;')
 }
 
+/**
+ * Copy text, falling back to execCommand when the async Clipboard API is
+ * missing or refuses. A plain-HTTP admin page (e.g. http://192.168.x.x:8787)
+ * has no Clipboard API at all, and a browser that denies the permission
+ * rejects writeText — both used to surface as "复制失败".
+ */
+async function copyToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Fall through to the selection-based fallback.
+    }
+  }
+  if (typeof document.execCommand !== 'function') return false
+  const area = document.createElement('textarea')
+  area.value = String(text)
+  area.setAttribute('readonly', '')
+  area.style.position = 'fixed'
+  area.style.top = '-1000px'
+  area.style.opacity = '0'
+  document.body.appendChild(area)
+  const selection = document.getSelection()
+  const previous = selection !== null && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+  area.select()
+  area.setSelectionRange(0, area.value.length)
+  let copied = false
+  try {
+    copied = document.execCommand('copy')
+  } catch {
+    copied = false
+  }
+  area.remove()
+  if (selection !== null && previous !== null) {
+    selection.removeAllRanges()
+    selection.addRange(previous)
+  }
+  return copied
+}
+
 function fmtNum(value) {
   const number = Number(value ?? 0)
   if (!Number.isFinite(number)) return '0'
@@ -678,11 +719,21 @@ function showSecret(key) {
     if (event.target === overlay || event.target.closest('[data-close]')) closeModal()
   })
   $('#copy-secret').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(key)
+    const copied = await copyToClipboard(key)
+    if (copied) {
       toast('已复制到剪贴板')
-    } catch {
-      toast('复制失败，请手动选中复制', 'err')
+      return
+    }
+    toast('复制失败，已选中密钥，请按 Ctrl+C 复制', 'err')
+    const box = $('#secret-value')
+    if (box !== null) {
+      const range = document.createRange()
+      range.selectNodeContents(box)
+      const selection = window.getSelection()
+      if (selection !== null) {
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
     }
   })
 }
