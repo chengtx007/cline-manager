@@ -36,6 +36,7 @@ OpenAI 客户端 ──► /v1/chat/completions ──► 账户池（轮询 / �
 - **额度守卫与自动切换**：定期读取 Cline 官方额度；在首个 token 前遇到 401/403、402、额度耗尽或 429 时，立即换账户并让失败的账户进入冷却。
 - **按模型钉住服务商**：配置服务商顺序、`strict` / `preferred` 模式、`cost/ttft/tps` 排序和排除列表；支持自动探测服务商、逐渠道校验，以及「测试钉住」按当前规则发一次真实请求并回读实际服务商。
 - **双拼写注入**：同时写 OpenRouter（`provider.*`）和 Vercel AI Gateway（`providerOptions.gateway.*`）两种字段，避免网关切换链路后钉住悄悄失效。
+- **可选的短模型名**：设置里开启后，`/v1/models` 与 `/v1` 响应里的 `model` 会去掉 `cline-pass/` 前缀（例如 `glm-5.3`）；后台仍用完整 ID 管理钉住，请求两种写法都接受。
 - **接入密钥**：后台创建/停用/删除网关自己的 `sk-cline-...` Key，客户端用 `Authorization: Bearer` 或 `x-api-key` 调用。
 - **模型开关**：关闭的模型不会出现在 `/v1/models`，请求会返回 `model_not_found`。
 - **用量统计**：本地按天、模型、账户、接入 Key 统计请求数与输入/输出/缓存/推理 token；账户详情还能拉取 Cline 官方的 30 天逐日逐模型用量和费用。
@@ -152,7 +153,7 @@ const resp = await client.chat.completions.create({
 console.log(resp.choices[0].message.content)
 ```
 
-模型 ID 可以写完整 `cline-pass/glm-5.3`，也可以只写 `glm-5.3`；网关会自动映射到已启用的完整 ID。未知模型默认允许透传，可在「设置」里关闭。
+模型 ID 可以写完整 `cline-pass/glm-5.3`，也可以只写 `glm-5.3`；网关会自动映射到已启用的完整 ID。未知模型默认允许透传，可在「设置」里关闭。开启「去掉 /v1 模型名的 cline-pass/ 前缀」后，`/v1/models` 和响应里的 `model` 都会返回短名，后台与钉住配置仍使用完整 ID。
 
 ## 环境变量
 
@@ -178,7 +179,7 @@ Node ≥ 20.6 可以用 `node --env-file=.env server.js` 读取 `.env`。
   - **校验**：对每个服务商发一次严格的微型请求，并回读响应里的实际服务商，确认钉住是否真的生效。
   - **测试钉住**：按当前保存的钉住规则（含模式、顺序、排序、排除）发一次真实请求，回读实际服务商和使用的账户；行内会显示「钉住已生效 / 钉住未生效」。线上请求如果被路由到别的服务商，也会在行内标出。
 - **接入密钥**：创建（完整 Key 只显示一次）、停用、启用、删除。
-- **设置**：上游地址、轮询/单账户、优先账户、额度守卫阈值与刷新间隔、冷却时间、超时，以及公开展示页开关。
+- **设置**：上游地址、轮询/单账户、优先账户、额度守卫阈值与刷新间隔、冷却时间、超时、公开展示页开关，以及是否去掉 `/v1` 模型名的 `cline-pass/` 前缀。
 
 ![设置](docs/screenshots/settings.png)
 
@@ -258,7 +259,7 @@ Cline Pass 背后有两条路由链路，它们认的字段不一样：
 
 - 工作流：[`.github/workflows/docker.yml`](.github/workflows/docker.yml)
 - 触发：推送到 `main`、推送 `v*` 标签、PR、手动 `workflow_dispatch`
-- 流程：先跑 16 项端到端测试和 7 项 UI 测试，再构建 `linux/amd64` + `linux/arm64` 多架构镜像并推送到 GHCR
+- 流程：先跑 17 项端到端测试和 7 项 UI 测试，再构建 `linux/amd64` + `linux/arm64` 多架构镜像并推送到 GHCR
 - PR 只构建 `linux/amd64` 且不推送
 
 发布一个新版本：
@@ -393,7 +394,7 @@ data/                        运行时生成
 ## 测试
 
 ```bash
-npm test        # 端到端：鉴权、额度、流式、双链路钉住、测试钉住、探测、校验、公开展示页、自动切换、密钥、重启持久化
+npm test        # 端到端：鉴权、额度、流式、双链路钉住、测试钉住、探测、校验、公开展示页、短模型名、自动切换、密钥、重启持久化
 npm install     # 安装 jsdom（仅 UI 测试需要）
 npm run test:ui # 用 jsdom 实际渲染并点击管理后台
 npm run test:all

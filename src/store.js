@@ -48,6 +48,8 @@ export function defaultConfig() {
     activeAccountId: '',
     /** Opt-in, unauthenticated status page at /public. */
     publicDashboard: false,
+    /** Expose model ids without the internal cline-pass/ namespace on /v1. */
+    stripModelPrefix: false,
     cooldown: {
       quotaMs: 15 * 60_000,
       authMs: 30 * 60_000,
@@ -89,6 +91,7 @@ function coerceConfig(raw) {
   config.models.enabled = config.models.enabled.filter((id) => config.models.known.includes(id))
   config.accountMode = config.accountMode === 'roundrobin' ? 'roundrobin' : 'single'
   config.publicDashboard = config.publicDashboard === true
+  config.stripModelPrefix = config.stripModelPrefix === true
   return config
 }
 

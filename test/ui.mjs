@@ -119,6 +119,7 @@ try {
   assert(document.querySelector('#settings-form'), 'settings form missing')
   assert(text().includes('额度守卫'))
   assert(document.querySelector('#settings-form input[name="publicDashboard"]'), 'public dashboard toggle missing')
+  assert(document.querySelector('#settings-form input[name="stripModelPrefix"]'), 'strip prefix toggle missing')
   console.log('  ✓ 设置页渲染')
 
   assert.equal(errors.length, 0, `browser errors: ${errors.map((error) => error.message ?? error).join('; ')}`)

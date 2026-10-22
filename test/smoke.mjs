@@ -242,6 +242,27 @@ try {
   assert.equal(response.status, 404)
   ok('公开展示页开关、打码账户与今日统计')
 
+  // 14b. optional short model names on the OpenAI surface
+  let listed = await (await listModels()).json()
+  assert(listed.data.every((model) => model.id.startsWith('cline-pass/')))
+  await admin('PATCH', '/settings', { stripModelPrefix: true })
+  listed = await (await listModels()).json()
+  assert(listed.data.length > 0)
+  assert(listed.data.every((model) => !model.id.startsWith('cline-pass/')))
+  const singleModel = await fetch(`${base}/v1/models/glm-5.3`, { headers: { Authorization: `Bearer ${apiKey}` } })
+  assert.equal(singleModel.status, 200)
+  assert.equal((await singleModel.json()).id, 'glm-5.3')
+  const shortChat = await chat({ model: 'glm-5.3', messages: [{ role: 'user', content: 'short name' }] })
+  assert.equal(shortChat.status, 200)
+  assert.equal((await shortChat.json()).model, 'glm-5.3')
+  const shortStream = await chat({ model: 'cline-pass/glm-5.3', messages: [{ role: 'user', content: 'short stream' }], stream: true })
+  assert.equal(shortStream.status, 200)
+  const shortSSE = await shortStream.text()
+  assert(shortSSE.includes('"model":"glm-5.3"'))
+  assert(!shortSSE.includes('"model":"cline-pass/glm-5.3"'))
+  await admin('PATCH', '/settings', { stripModelPrefix: false })
+  ok('可选的 cline-pass/ 模型名前缀隐藏')
+
   // 13. round-robin across healthy accounts
   const alt = await admin('POST', '/accounts', { name: 'alt', apiKey: 'key-alt' })
   await admin('POST', `/accounts/${enc(alt.account.id)}/usage`, { days: 0 })

@@ -33,6 +33,11 @@ const MAX_BUFFERED_FRAMES = 200
 export function createChatProxy({ store, pool, models, stats, log }) {
   const config = () => store.config
 
+  /** The model name a client sees; internal ids stay canonical. */
+  function clientModel(id) {
+    return config().stripModelPrefix === true ? String(id ?? '').replace(/^cline-pass\//, '') : id
+  }
+
   function corsHeaders() {
     if (config().server.cors !== true) return {}
     return {
@@ -177,6 +182,7 @@ export function createChatProxy({ store, pool, models, stats, log }) {
    */
   async function streamAttempt({ account, upstreamBody, signal, res, canonical }) {
     const started = Date.now()
+    const responseModel = clientModel(canonical)
     let response
     try {
       response = await openChatStream({
@@ -218,7 +224,7 @@ export function createChatProxy({ store, pool, models, stats, log }) {
       const routing = parseRouting(payload)
       const usage = mapUsage(payload?.usage)
       writeSSEHeaders(res)
-      for (const frame of synthesizeSSE(payload, canonical)) {
+      for (const frame of synthesizeSSE(payload, responseModel)) {
         res.write(typeof frame === 'string' ? `data: ${frame}\n\n` : `data: ${JSON.stringify(frame)}\n\n`)
       }
       res.end()
@@ -245,6 +251,13 @@ export function createChatProxy({ store, pool, models, stats, log }) {
       writeSSEHeaders(res)
       for (const raw of pending) res.write(raw)
       pending.length = 0
+    }
+
+    /** Report the gateway's model id, not the router's internal slug. */
+    const frameText = (raw, payload) => {
+      if (payload === null || typeof payload !== 'object' || typeof payload.model !== 'string') return raw
+      if (!String(raw).trimStart().startsWith('data:')) return raw
+      return `data: ${JSON.stringify({ ...payload, model: responseModel })}\n\n`
     }
 
     const onAbort = () => {
@@ -287,13 +300,13 @@ export function createChatProxy({ store, pool, models, stats, log }) {
       if (Array.isArray(payload?.choices) && payload.choices.length > 0) {
         sawContent = true
         commit()
-        res.write(raw)
+        res.write(frameText(raw, payload))
         return 'written'
       }
       if (committed) {
-        res.write(raw)
+        res.write(frameText(raw, payload))
       } else if (pending.length < MAX_BUFFERED_FRAMES) {
-        pending.push(raw)
+        pending.push(frameText(raw, payload))
       }
       return 'buffered'
     }
@@ -460,7 +473,8 @@ export function createChatProxy({ store, pool, models, stats, log }) {
             })
             const interpreted = interpret(result)
             if (interpreted.ok) {
-              sendJSON(res, 200, interpreted.payload, corsHeaders())
+              const outgoing = { ...interpreted.payload, model: clientModel(canonical) }
+              sendJSON(res, 200, outgoing, corsHeaders())
             }
             outcome = { ...interpreted, ms: Date.now() - attemptStarted }
           }
@@ -570,7 +584,7 @@ export function createChatProxy({ store, pool, models, stats, log }) {
       return
     }
     const data = models.enabledModels().map((model) => ({
-      id: model.id,
+      id: clientModel(model.id),
       object: 'model',
       created: 0,
       owned_by: 'cline-pass',
@@ -589,7 +603,7 @@ export function createChatProxy({ store, pool, models, stats, log }) {
       sendJSON(res, 404, openAIError(`模型不存在：${id}`, 'invalid_request_error', 'model_not_found'), corsHeaders())
       return
     }
-    sendJSON(res, 200, { id: resolved.id, object: 'model', created: 0, owned_by: 'cline-pass' }, corsHeaders())
+    sendJSON(res, 200, { id: clientModel(resolved.id), object: 'model', created: 0, owned_by: 'cline-pass' }, corsHeaders())
   }
 
   return { handleChat, handleModels, handleModel, authenticate, corsHeaders }

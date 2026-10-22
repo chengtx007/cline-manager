@@ -910,6 +910,11 @@ function renderSettings() {
               <span>开启公开展示页（无需管理员令牌）</span>
             </label>
             <div class="hint" style="margin:-2px 0 12px">公开地址：<a href="/public" target="_blank" rel="noreferrer">/public</a> · 只展示打码后的账户名、账号状态和今日汇总，不含 Key、完整账户名或请求内容。</div>
+            <label class="field" style="grid-template-columns:auto 1fr;align-items:center">
+              <span class="switch"><input type="checkbox" name="stripModelPrefix" ${settings.stripModelPrefix ? 'checked' : ''}><span></span></span>
+              <span>去掉 /v1 模型名的 cline-pass/ 前缀</span>
+            </label>
+            <div class="hint" style="margin:-2px 0 12px">开启后 /v1/models 与 /v1 响应里的 model 返回短名（如 glm-5.3）；后台仍用完整 ID 管理钉住，两种写法都可以请求。</div>
           </div>
           <div>
             <label class="field" style="grid-template-columns:auto 1fr;align-items:center">
@@ -952,6 +957,7 @@ function renderSettings() {
           allowUnknownModels: form.elements.allowUnknownModels.checked,
           cors: form.elements.cors.checked,
           publicDashboard: form.elements.publicDashboard.checked,
+          stripModelPrefix: form.elements.stripModelPrefix.checked,
           quotaGuard: {
             enabled: form.elements.quotaEnabled.checked,
             threshold: number('quotaThreshold'),

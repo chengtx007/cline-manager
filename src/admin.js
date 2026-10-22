@@ -75,6 +75,7 @@ export function createAdmin({ store, pool, usage, models, stats, log, adminToken
       allowUnknownModels: current.server.allowUnknownModels === true,
       cors: current.server.cors === true,
       publicDashboard: current.publicDashboard === true,
+      stripModelPrefix: current.stripModelPrefix === true,
       quotaGuard: { ...current.quotaGuard },
       cooldown: { ...current.cooldown },
       timeouts: {
@@ -233,6 +234,7 @@ export function createAdmin({ store, pool, usage, models, stats, log, adminToken
         if (body.allowUnknownModels !== undefined) next.server.allowUnknownModels = boolOr(body.allowUnknownModels, next.server.allowUnknownModels)
         if (body.cors !== undefined) next.server.cors = boolOr(body.cors, next.server.cors)
         if (body.publicDashboard !== undefined) next.publicDashboard = boolOr(body.publicDashboard, next.publicDashboard === true)
+        if (body.stripModelPrefix !== undefined) next.stripModelPrefix = boolOr(body.stripModelPrefix, next.stripModelPrefix === true)
         if (body.baseURL !== undefined && String(body.baseURL).trim()) next.upstream.baseURL = String(body.baseURL).trim().replace(/\/+$/, '')
         if (body.quotaGuard && typeof body.quotaGuard === 'object') {
           next.quotaGuard.enabled = boolOr(body.quotaGuard.enabled, next.quotaGuard.enabled)
